@@ -74,7 +74,7 @@ func Note(resbody []byte, page []school, i int) {
 	var dataslice response
 	json.Unmarshal(resbody, &dataslice)
 	//if err != nil {
-	//	fmt.Println("Error unmarshalling")
+	//		fmt.Println("Error unmarshalling")
 	//}
 	for _, item := range dataslice.Data.Item {
 
@@ -129,5 +129,4 @@ func main() {
 	}
 
 	fmt.Println("JSON 数据已成功写入文件: schools.json")
-
 }
