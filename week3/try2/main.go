@@ -28,11 +28,15 @@ type school struct {
 	SchoolID int    `json:"school_id"`
 	Name     string `json:"name"`
 }
+type page struct {
+	resp response
+	indx int
+}
 
 var (
-	ch      = make(chan response)
-	schools = make([]school, 0)
-	mu      sync.RWMutex
+	ch      = make(chan page)
+	schools = make([][]school, 10)
+	mu      = make([]sync.RWMutex, 10)
 	num     int64
 	wg      sync.WaitGroup
 	end     = make(chan struct{})
@@ -40,8 +44,11 @@ var (
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
+	for i := 0; i < 10; i++ {
+		schools[i] = make([]school, 0)
+	}
 	wg.Add(2)
-	go GetURL(cancel)
+	go GetURL()
 	go Recieve(ctx)
 	go check(cancel) //检查数量是否达标
 	wg.Wait()
@@ -56,9 +63,12 @@ func main() {
 		fmt.Println("Writing to file failed:", err)
 		return
 	}
+	for i, _ := range schools {
+		fmt.Println(len(schools[i]))
+	}
 }
 
-func GetURL(cancel context.CancelFunc) {
+func GetURL() {
 	defer wg.Done()
 
 	for i := 1; i <= 10; i++ {
@@ -81,7 +91,7 @@ func GetURL(cancel context.CancelFunc) {
 			fmt.Println("Error unmarshalling JSON:", err)
 			continue
 		}
-		ch <- r
+		ch <- page{r, i}
 	}
 
 }
@@ -94,15 +104,15 @@ func Recieve(ctx context.Context) {
 
 	for {
 		select {
-		case r := <-ch:
-			for _, item := range r.Data.Item {
+		case p := <-ch:
+			for _, item := range p.resp.Data.Item {
 				id := item.SchoolID
 				name := item.Name
 				var s = school{
 					SchoolID: id,
 					Name:     name,
 				}
-				go Addsch(s)
+				go Addsch(s, p.indx)
 			}
 		case <-ctx.Done():
 			return
@@ -110,8 +120,10 @@ func Recieve(ctx context.Context) {
 	}
 }
 
-func Addsch(s school) {
-	schools = append(schools, s)
+func Addsch(s school, i int) {
+	mu[i-1].Lock()
+	defer mu[i-1].Unlock()
+	schools[i-1] = append(schools[i-1], s)
 	atomic.AddInt64(&num, 1)
 	fmt.Printf("第%d个大学（%s）被录入\n", atomic.LoadInt64(&num), s.Name)
 	if atomic.LoadInt64(&num) == 200 {
